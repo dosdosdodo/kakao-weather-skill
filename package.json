@@ -1,0 +1,17 @@
+{
+  "name": "kakao-weather-skill",
+  "version": "1.0.0",
+  "description": "카카오 i 오픈빌더 날씨 챗봇 스킬 서버",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
