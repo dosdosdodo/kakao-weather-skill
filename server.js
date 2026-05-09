@@ -1,10 +1,12 @@
 const express = require("express");
+const axios = require("axios");
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+const KAKAO_API_KEY = process.env.KAKAO_REST_API_KEY; // Railway Variables 필수
 
-// ── 날씨 API 헬퍼 (Open-Meteo, 무료·키 불필요) ──────────────────────────
+// ── 날씨 API 헬퍼 (WMO 코드 유지) ──────────────────────────────────────────
 const WMO_CODE = {
   0: "맑음 ☀️", 1: "대체로 맑음 🌤", 2: "구름 조금 ⛅", 3: "흐림 ☁️",
   45: "안개 🌫", 48: "짙은 안개 🌫",
@@ -19,8 +21,9 @@ function wmo(code) {
   return WMO_CODE[code] ?? "알 수 없음";
 }
 
-/** 사용자 세션에 위치 저장 */
+/** 사용자 데이터 저장소 */
 const locationStore = new Map(); // userId → { lat, lon, name }
+const tempSearchDB = new Map(); // 중복 지역 대기용 { userId: [검색결과리스트] }
 
 function getUserLocation(userId) {
   return locationStore.get(userId) ?? null;
@@ -37,9 +40,22 @@ async function fetchWeather(lat, lon) {
     `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max` +
     `&timezone=Asia%2FSeoul&forecast_days=8`;
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("날씨 API 오류");
-  return res.json();
+  const res = await axios.get(url);
+  return res.data;
+}
+
+/** 카카오 주소 검색 API */
+async function searchAddress(query) {
+  try {
+    const res = await axios.get('https://dapi.kakao.com/v2/local/search/address.json', {
+      params: { query },
+      headers: { Authorization: `KakaoAK ${KAKAO_API_KEY}` }
+    });
+    return res.data.documents;
+  } catch (e) {
+    console.error("주소 검색 오류:", e);
+    return [];
+  }
 }
 
 /** 날짜 → 요일 */
@@ -73,41 +89,65 @@ function simpleTextWithQuickReplies(text, replies) {
 
 // ── 핸들러 ────────────────────────────────────────────────────────────────
 
-/** 위치 설정 */
+/** 위치 설정 (번호 선택 로직 포함) */
 async function handleSetLocation(req, res) {
   const body = req.body;
   const userId = body.userRequest?.user?.id ?? "anonymous";
+  const utterance = (body.userRequest?.utterance ?? "").trim();
   const params = body.action?.params ?? {};
 
-  let locationParam = params.location;
-  if (typeof locationParam === "string") {
-    try {
-      locationParam = JSON.parse(locationParam);
-    } catch {
-      locationParam = null;
+  // 1. 번호 선택 처리
+  if (/^\d+$/.test(utterance) && tempSearchDB.has(userId)) {
+    const list = tempSearchDB.get(userId);
+    const index = parseInt(utterance) - 1;
+
+    if (list[index]) {
+      const sel = list[index];
+      setUserLocation(userId, {
+        lat: sel.y,
+        lon: sel.x,
+        name: sel.address_name,
+      });
+      tempSearchDB.delete(userId);
+      return res.json(
+        simpleTextWithQuickReplies(
+          `✅ [${index + 1}번] 선택 완료!\n📍 위치가 "${sel.address_name}"(으)로 설정됐어요!\n이제 날씨를 조회해 보세요 🌤`,
+          ["오늘 날씨", "내일 날씨", "이번주 날씨", "도움말"]
+        )
+      );
     }
   }
 
-  if (!locationParam || !locationParam.lat || !locationParam.lon) {
-    return res.json(
-      simpleTextWithQuickReplies(
-        "📍 위치를 인식하지 못했어요.\n지역명을 다시 입력해 주세요.\n예) 서울, 부산, 제주",
-        ["오늘 날씨", "내일 날씨", "도움말"]
-      )
-    );
+  // 2. 검색 처리
+  const query = utterance.replace("위치", "").trim();
+  if (!query || query === "설정") {
+    return res.json(simpleText("📍 검색할 지역명을 입력해주세요.\n예) 위치 중앙동, 위치 역삼동"));
   }
 
-  const loc = {
-    lat: locationParam.lat,
-    lon: locationParam.lon,
-    name: locationParam.name ?? "설정된 위치",
-  };
-  setUserLocation(userId, loc);
+  const results = await searchAddress(query);
 
+  if (results.length === 0) {
+    return res.json(simpleText("🔎 검색 결과가 없습니다. 정확한 구나 동 이름을 입력해주세요."));
+  }
+
+  if (results.length > 1) {
+    tempSearchDB.set(userId, results);
+    let msg = `📍 검색 결과가 ${results.length}개 있습니다.\n원하시는 지역의 번호를 입력해주세요:\n\n`;
+    results.forEach((loc, i) => {
+      const addr = loc.address || loc.road_address;
+      const region = `${addr.region_1depth_name} ${addr.region_2depth_name}`;
+      msg += `${i + 1}. ${loc.address_name} (${region})\n`;
+    });
+    return res.json(simpleText(msg));
+  }
+
+  // 단일 결과
+  const loc = results[0];
+  setUserLocation(userId, { lat: loc.y, lon: loc.x, name: loc.address_name });
   return res.json(
     simpleTextWithQuickReplies(
-      `📍 위치가 "${loc.name}"(으)로 설정됐어요!\n이제 날씨를 조회해 보세요 🌤`,
-      ["오늘 날씨", "내일 날씨", "이번주 날씨", "도움말"]
+      `📍 위치가 "${loc.address_name}"(으)로 설정됐어요!`,
+      ["오늘 날씨", "내일 날씨", "이번주 날씨"]
     )
   );
 }
@@ -198,25 +238,24 @@ async function handleWeek(req, res) {
 
 /** 도움말 */
 function handleHelp(req, res) {
-  const text = `🌤 날씨 챗봇 도움말\n\n📍 위치 설정\n오늘/내일/이번주 날씨 조회가 가능합니다.`;
+  const text = `🌤 날씨 챗봇 도움말\n\n📍 위치 설정: '위치 동이름' 입력\n예) 위치 중앙동\n번호가 나오면 숫자를 입력해 선택하세요!`;
   return res.json(simpleTextWithQuickReplies(text, ["위치 설정", "오늘 날씨", "내일 날씨", "이번주 날씨"]));
 }
 
-// ── 라우팅 ────────────────────────────────────────────────────────────────
+// ── 라우팅 및 단일 엔드포인트 통합 ─────────────────────────────────────────
 
-app.post("/skill/set-location", handleSetLocation);
-app.post("/skill/today", handleToday);
-app.post("/skill/tomorrow", handleTomorrow);
-app.post("/skill/week", handleWeek);
-app.post("/skill/help", handleHelp);
-
-// 단일 엔드포인트 통합 처리
-app.post("/skill", (req, res) => {
+app.post("/skill", async (req, res) => {
   const utterance = (req.body.userRequest?.utterance ?? "").trim();
-  if (utterance.includes("위치 설정")) return handleSetLocation(req, res);
-  if (utterance.includes("오늘 날씨")) return handleToday(req, res);
-  if (utterance.includes("내일 날씨")) return handleTomorrow(req, res);
-  if (utterance.includes("이번주 날씨")) return handleWeek(req, res);
+  
+  // 위치 설정(번호 입력 포함) 우선 처리
+  if (utterance.startsWith("위치") || /^\d+$/.test(utterance) || utterance === "위치 설정") {
+    return await handleSetLocation(req, res);
+  }
+  
+  if (utterance.includes("오늘 날씨")) return await handleToday(req, res);
+  if (utterance.includes("내일 날씨")) return await handleTomorrow(req, res);
+  if (utterance.includes("이번주 날씨")) return await handleWeek(req, res);
+  
   return handleHelp(req, res);
 });
 
