@@ -53,7 +53,7 @@ async function searchAddress(query) {
     });
     return res.data.documents;
   } catch (e) {
-    console.error("주소 검색 오류:", e);
+    console.error("✘주소 검색 오류:", e);
     return [];
   }
 }
@@ -111,7 +111,7 @@ async function handleSetLocation(req, res) {
       tempSearchDB.delete(userId);
       return res.json(
         simpleTextWithQuickReplies(
-          `✅ [${index + 1}번] 선택 완료!\n📍 위치가 "${sel.address_name}"(으)로 설정됐어요!\n이제 날씨를 조회해 보세요 🌤`,
+          `✓[${index + 1}번] 선택 완료!\n📍 위치가 "${sel.address_name}"(으)로 설정됐어요!\n이제 날씨를 조회해 보세요 🌤`,
           ["오늘 날씨", "내일 날씨", "이번주 날씨", "도움말"]
         )
       );
@@ -121,18 +121,18 @@ async function handleSetLocation(req, res) {
   // 2. 검색 처리
   const query = utterance.replace("위치", "").trim();
   if (!query || query === "설정") {
-    return res.json(simpleText("검색할 지역명을 입력해주세요.\n예) 위치 중앙동, 위치 역삼동"));
+    return res.json(simpleText("➜검색할 지역명을 입력해주세요.\n예) 위치 중앙동, 위치 역삼동"));
   }
 
   const results = await searchAddress(query);
 
   if (results.length === 0) {
-    return res.json(simpleText("검색 결과가 없습니다. 정확한 구나 동 이름을 입력해주세요."));
+    return res.json(simpleText("✘검색 결과가 없습니다. 정확한 구나 동 이름을 입력해주세요."));
   }
 
   if (results.length > 1) {
     tempSearchDB.set(userId, results);
-    let msg = `📖검색 결과가 ${results.length}개 있습니다.\n원하시는 지역의 번호를 입력해주세요:\n\n`;
+    let msg = `➜검색 결과가 ${results.length}개 있습니다.\n원하시는 지역의 번호를 입력해주세요:\n\n`;
     results.forEach((loc, i) => {
       const addr = loc.address || loc.road_address;
       const region = `${addr.region_1depth_name} ${addr.region_2depth_name}`;
@@ -146,7 +146,7 @@ async function handleSetLocation(req, res) {
   setUserLocation(userId, { lat: loc.y, lon: loc.x, name: loc.address_name });
   return res.json(
     simpleTextWithQuickReplies(
-      `✔️위치가 "${loc.address_name}"(으)로 설정됐어요!`,
+      `✓위치가 "${loc.address_name}"(으)로 설정됐어요!`,
       ["오늘 날씨", "내일 날씨", "이번주 날씨"]
     )
   );
@@ -157,7 +157,7 @@ async function handleToday(req, res) {
   const userId = req.body.userRequest?.user?.id ?? "anonymous";
   const loc = getUserLocation(userId);
   if (!loc) {
-    return res.json(simpleTextWithQuickReplies("❕먼저 위치를 설정해 주세요!", ["위치 설정"]));
+    return res.json(simpleTextWithQuickReplies("➜먼저 위치를 설정해 주세요!", ["위치 설정"]));
   }
 
   try {
@@ -174,7 +174,7 @@ async function handleToday(req, res) {
 
     return res.json(simpleTextWithQuickReplies(text, ["내일 날씨", "이번주 날씨", "위치 설정"]));
   } catch (e) {
-    return res.json(simpleText("✖️날씨 정보를 가져오지 못했어요."));
+    return res.json(simpleText("✘날씨 정보를 가져오지 못했어요."));
   }
 }
 
@@ -183,7 +183,7 @@ async function handleTomorrow(req, res) {
   const userId = req.body.userRequest?.user?.id ?? "anonymous";
   const loc = getUserLocation(userId);
   if (!loc) {
-    return res.json(simpleTextWithQuickReplies("❕먼저 위치를 설정해 주세요!", ["위치 설정"]));
+    return res.json(simpleTextWithQuickReplies("➜먼저 위치를 설정해 주세요!", ["위치 설정"]));
   }
 
   try {
@@ -200,7 +200,7 @@ async function handleTomorrow(req, res) {
 
     return res.json(simpleTextWithQuickReplies(text, ["오늘 날씨", "이번주 날씨", "위치 설정"]));
   } catch (e) {
-    return res.json(simpleText("✖️날씨 정보를 가져오지 못했어요."));
+    return res.json(simpleText("✘날씨 정보를 가져오지 못했어요."));
   }
 }
 
@@ -209,7 +209,7 @@ async function handleWeek(req, res) {
   const userId = req.body.userRequest?.user?.id ?? "anonymous";
   const loc = getUserLocation(userId);
   if (!loc) {
-    return res.json(simpleTextWithQuickReplies("📍 먼저 위치를 설정해 주세요!", ["위치 설정"]));
+    return res.json(simpleTextWithQuickReplies("➜먼저 위치를 설정해 주세요!", ["위치 설정"]));
   }
 
   try {
@@ -238,7 +238,7 @@ async function handleWeek(req, res) {
 
 /** 도움말 */
 function handleHelp(req, res) {
-  const text = `☁️ 날씨 챗봇 도움말\n\n 위치 설정: '위치 동이름' 입력\n예) 위치 중앙동\n번호가 나오면 숫자를 입력해 선택하세요!`;
+  const text = `➜날씨 챗봇 도움말\n\n 위치 설정: '위치 동이름' 입력\n예) 위치 중앙동\n번호가 나오면 숫자를 입력해 선택하세요!`;
   return res.json(simpleTextWithQuickReplies(text, ["위치 설정", "오늘 날씨", "내일 날씨", "이번주 날씨"]));
 }
 
@@ -259,4 +259,4 @@ app.post("/skill", async (req, res) => {
   return handleHelp(req, res);
 });
 
-app.listen(PORT, () => console.log(`✔️ 서버 실행 중: 포트 ${PORT}`));
+app.listen(PORT, () => console.log(`✓서버 실행 중: 포트 ${PORT}`));
