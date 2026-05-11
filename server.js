@@ -52,10 +52,15 @@ function formatAddress(doc) {
     p.endsWith("동") || p.endsWith("읍") || p.endsWith("면") ||
     p.endsWith("로") || p.endsWith("길")
   ) || "";
-  // 구/동 둘 다 있으면 "방이동 · 송파구", 아니면 앞 2~3단어
-  if (dong && gu) return `${dong} · ${gu}`;
+  if (dong && gu) return `${dong} ${gu}`;
   if (gu) return parts.slice(1, 3).join(" ");
   return parts.slice(1, 3).join(" ");
+}
+
+function formatCategory(doc) {
+  if (!doc.category_name) return "";
+  // "음식점 > 한식 > 국밥" → "한식, 국밥" (마지막 2개)
+  return doc.category_name.split(" > ").slice(-2).join(", ");
 }
 
 const createTextRes = (text, quickReplies = []) => ({
@@ -117,9 +122,15 @@ app.post("/skill", async (req, res) => {
     let msg = `🔎 검색 결과입니다. 번호를 입력하세요:\n\n`;
     results.forEach((l, i) => {
       const name = l.place_name || l.address_name;
-      const addrShort = formatAddress(l);
-      const prefix = i < 2 ? "⭐ " : "";
-      msg += `${prefix}${i + 1}. ${name}\n    📍 ${addrShort}\n\n`;
+      const addr = formatAddress(l);
+      const category = formatCategory(l);
+      const prefix = i < 2 ? "⭐" : `${i + 1}`;
+      const catStr = category ? ` (${category})` : "";
+      if (i < 2) {
+        msg += `⭐ ${i + 1}. ${name} · ${addr}${catStr}\n`;
+      } else {
+        msg += `${i + 1}. ${name} · ${addr}${catStr}\n`;
+      }
     });
     return res.json(createTextRes(msg));
   }
