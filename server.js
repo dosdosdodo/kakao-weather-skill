@@ -238,7 +238,7 @@ async function handleWeek(req, res) {
 
 /** 도움말 */
 function handleHelp(req, res) {
-  const text = `🌤 날씨 챗봇 도움말\n\n 위치 설정: '위치 동이름' 입력\n예) 위치 중앙동\n번호가 나오면 숫자를 입력해 선택하세요!`;
+  const text = `☁️ 날씨 챗봇 도움말\n\n 위치 설정: '위치 동이름' 입력\n예) 위치 중앙동\n번호가 나오면 숫자를 입력해 선택하세요!`;
   return res.json(simpleTextWithQuickReplies(text, ["위치 설정", "오늘 날씨", "내일 날씨", "이번주 날씨"]));
 }
 
