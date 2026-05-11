@@ -146,3 +146,20 @@ const server = app.listen(PORT, "0.0.0.0", () => {
 process.on("SIGTERM", () => {
   server.close(() => process.exit(0));
 });
+async function searchLocation(query) {
+  try {
+    const headers = { Authorization: `KakaoAK ${KAKAO_API_KEY}` };
+    
+    // API 키 확인용 로그
+    console.log("🔑 API Key:", KAKAO_API_KEY ? `설정됨 (${KAKAO_API_KEY.slice(0,4)}...)` : "❌ 없음!");
+    
+    let res = await axios.get("https://dapi.kakao.com/v2/local/search/keyword.json", {
+      params: { query, size: 5 }, headers,
+    });
+    return res.data.documents;
+  } catch (e) {
+    // 상세 에러 출력
+    console.error("✘ Kakao API Error:", e.response?.status, e.response?.data || e.message);
+    return [];
+  }
+}
